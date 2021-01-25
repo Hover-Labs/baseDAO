@@ -35,6 +35,8 @@ These two parts are coupled into one smart contract because interaction between 
 BaseDAO is a concrete smart contract, but also a framework to implement various DAOs.
 It can be configured at origination for any specific needs.
 
+TODO: these probably need to be `big_map` too
+
 In order to do so the contract has two type synonyms for `(string, bytes) map`
 (or in Michelson: `map string bytes`), that can contain arbitrary data:
 `proposal_metadata` and `contract_extra`.
@@ -52,10 +54,6 @@ For example a "treasury" style DAO would have a `proposal_metadata` containing:
 "agoraPostId": <packed nat>
 ```
 and an empty `contract_extra`.
-
-Lastly, there is one more `(string, bytes) map` type synonym: `custom_entrypoints`,
-used to execute arbitrary logic on the contract, see [its section](#custom-entrypoints)
-for more information on its content and usage.
 
 DAO configuration value parameters are captured by the `config` type:
 
@@ -84,18 +82,52 @@ type config =
   // ^ Determine the maximum value of voting period that is allowed to be set.
   ; min_voting_period : nat
   // ^ Determine the minimum value of voting period that is allowed to be set.
-
-  ; custom_entrypoints : custom_entrypoints
-  // ^ Packed arbitrary lambdas associated to a name for custom execution.
   }
 ```
+
+## Startup Configuration
+
+As a measure to fit into the origination operation limits, the contract `code`
+does not contain the entrypoints logic, instead these (except for one) are
+stored as lambdas in the storage.
+
+To support loading the entrypoints in the contract as well as other initial
+operations, the contract starts in a "startup mode" and contains a `startup`
+entrypoint (which is the one exception above) to manage the transition.
+
+Here it's only possible to:
+1. use `startup` to add or remove entrypoints from the storage.
+2. call any endpoint, but only if the `sender` is `admin`.
+3. use `startup` to exit the "startup mode", which is irreversible.
+
+To track this functionality we have `startup_storage` defined as:
+```ocaml
+type storable_entrypoint = (bytes * (storage * config)) -> (operation list * storage)
+
+type stored_entrypoints = (string, storable_entrypoint) big_map
+
+type startup_storage =
+  { starting_up : bool
+  // ^ flag, when 'true' the contract is in "startup mode"
+  ; stored_entrypoints : stored_entrypoints
+  // ^ big_map containing all the entrypoints with their parameter 'pack'ed
+  }
+```
+which constitutes the final piece of our overall storage.
+
+Note that the `stored_entrypoints` `big_map` includes both the standard entrypoint
+as well as any custom ones that one might use, see [its section](#custom-entrypoints)
+for more information on the usage of the latter.
 
 Note:
 - the `token_metadata` type matches the one defined in FA2.
 - the `proposal` type is defined below.
-- `storage` is the storage type of the contract without the configuration.
-- `full_storage` is instead the full storage of the contract, including its configuration,
-which is to say: `type full_storage = storage * config`.
+- `storage` is the storage type of the contract without the `config` and `startup_storage`.
+- stored entrypoints have access to both `storage` and `config` but can only
+modify the `storage`.
+- `full_storage` is instead the full storage of the contract, including its
+configuration and startup values, which is to say:
+`type full_storage = startup_storage * (storage * config)`.
 
 
 ```ocaml
@@ -216,8 +248,10 @@ The list of erros may be inaccurate and incomplete, it will be updated during th
 | `PROPOSER_NOT_EXIST_IN_LEDGER`  | Expect a proposer address to exist in Ledger but it is not found                                            |
 | `PROPOSAL_NOT_UNIQUE`           | Trying to propose a proposal that is already existed in the Storage.                                        |
 | `MISSIGNED`                     | Parameter signature does not match the expected one - for permits.                                          |
-| `ENTRYPOINT_NOT_FOUND`          | Throw when `CallCustom` is called with a non-existing entrypoint                                            |
-| `UNPACKING_FAILED`              | Throw when unpacking of the stored lambda in a 'CallCustom' call fails                                      |
+| `ENTRYPOINT_NOT_FOUND`          | Throw when a non-existing entrypoint is called (with `CallCustom` or otherwise)                             |
+| `UNPACKING_FAILED`              | Throw when unpacking of a stored entrypoint or its parameter fails                                          |
+
+TODO: add startup errors
 
 # Entrypoints
 
@@ -821,19 +855,46 @@ Parameter (in Michelson):
 
 - For `vote` entrypoint with permit, returns the current suitable counter for constructing permit signature.
 
+## Startup mode
+
+The contract has a "startup mode" that can be operated managed and exited at the
+beginning of its life-cycle, see [Startup Configuration](#startup-configuration).
+
+To fo this the contract `parameter` has:
+
+### **startup**
+
+```ocaml
+type startup_parameter = (string * (bytes option)) option
+
+Startup of startup_parameter
+```
+
+Parameter (in Michelson):
+```
+(option %startup
+  (pair
+    string
+    (option bytes)
+  )
+)
+```
+
+- If called with `Some` value it `unpack`s a storable entrypoint lambda from the
+  received `bytes` and stores it associating it to the given `string` name.
+- Fails with `UNPACKING_FAILED` if `unpack` from the point above fails.
+- If called with `None` ends the "startup mode", by updating the `starting_up` flag.
+- Fails with `NOT_IN_STARTUP` if the stored `starting_up` flag is `false`.
+- Fails with `NOT_ADMIN` if the sender of this call is not contract Administrator.
+
 ## Custom entrypoints
 
 BaseDAO allows DAOs to define their own additional entrypoints.
 
-This is done with the use of the `config` option `custom_entrypoints`, which is
-a `(string, bytes) map` that associates a `string` "entrypoint name" with the
-`bytes` of a `pack`ed lambda with the signature:
-
-```ocaml
-bytes * full_storage -> operation list * storage
-```
-
-where the bytes is the packed parameter of the custom entrypoint.
+This is done with the use of the `startup_storage` option `stored_entrypoints`,
+which is a `big_map` that associates a `string` "entrypoint name" with the
+lambda accepting `bytes` as its `pack`ed parameter, see
+[Startup Configuration](#startup-configuration).
 
 To call one of these "custom entrypoints" the contract `parameter` has:
 
