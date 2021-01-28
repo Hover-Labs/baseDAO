@@ -15,7 +15,7 @@ import Lorentz
 import Morley.Nettest
 import Util.Named
 
-import BaseDAO.ShareTest.Common (OriginateFn)
+import BaseDAO.ShareTest.Common (OriginateFn, getTotalSupplyFromLedger)
 import BaseDAO.ShareTest.Proposal.Config ()
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -55,6 +55,7 @@ originateLigoDaoWithBalance extra configL balFunc = do
               ! defaults
             )
             { sLedger = bal
+            , sTotalSupply = getTotalSupplyFromLedger (bal)
             , sOperators = operators
             }
         , fsConfig = configL

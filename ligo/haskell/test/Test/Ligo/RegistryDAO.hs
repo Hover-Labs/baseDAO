@@ -24,7 +24,7 @@ import Michelson.Typed.Convert (untypeValue)
 import Morley.Nettest
 import Morley.Nettest.Tasty (nettestScenarioCaps)
 
-import BaseDAO.ShareTest.Common (makeProposalKey)
+import BaseDAO.ShareTest.Common (getTotalSupplyFromLedger, makeProposalKey)
 import Ligo.BaseDAO.Contract
 import Ligo.BaseDAO.Types
 import Ligo.Util
@@ -197,8 +197,14 @@ test_RegistryDAO =
    initialStorage :: Address -> [Address] -> FullStorage
    initialStorage admin wallets = let
       fs = fromVal ($(fetchValue @FullStorage "ligo/haskell/test/registryDAO_storage.tz" "REGISTRY_STORAGE_PATH"))
+      ledger = BigMap $ Map.fromList [((w, FA2.theTokenId), defaultTokenBalance) | w <- wallets]
+
       oldStorage = fsStorage fs
-      newStorage = oldStorage { sAdmin = admin, sLedger = BigMap $ Map.fromList [((w, FA2.theTokenId), defaultTokenBalance) | w <- wallets] }
+      newStorage = oldStorage
+        { sAdmin = admin
+        , sLedger = ledger
+        , sTotalSupply = getTotalSupplyFromLedger ledger
+        }
       in fs { fsStorage = newStorage }
 
    initialStorageWithExplictRegistryDAOConfig :: Address -> [Address] -> FullStorage

@@ -49,3 +49,11 @@ let get_vote_permit_counter (param, store : vote_permit_counter_param * storage)
     :: ([] : operation list)
   , store
   )
+
+let get_total_supply (param, store : get_total_supply_param * storage) : return =
+  let result = match Big_map.find_opt param.token_id store.total_supply with
+      None -> 0n
+    | Some v -> v
+  in ( Tezos.transaction result 0mutez param.callback :: ([] : operation list)
+     , store
+     )

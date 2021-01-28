@@ -5,10 +5,6 @@
 
 #include "../types.mligo"
 
-
-let unfrozen_token_id: nat = 0n
-let frozen_token_id: nat = 1n
-
 // -----------------------------------------------------------------
 // Helper
 // -----------------------------------------------------------------
@@ -30,13 +26,24 @@ let debit_from (amt, from_, token_id, store: nat * address * token_id * storage)
   match Big_map.find_opt (from_, token_id) store.ledger with
     Some bal ->
       let store =
-        match Michelson.is_nat (bal - amt) with
-          Some new_bal ->
-            { store with
-              ledger = Big_map.update (from_, token_id) (Some new_bal) store.ledger
-            }
+        match Map.find_opt token_id store.total_supply with
+          Some current_total_supply ->
+            (match Michelson.is_nat (current_total_supply - amt) with
+              Some new_total_supply ->
+                (match Michelson.is_nat (bal - amt) with
+                  Some new_bal ->
+                    { store with
+                      ledger = Big_map.update (from_, token_id) (Some new_bal) store.ledger
+                    ; total_supply = Map.update token_id (Some new_total_supply) store.total_supply
+                    }
+                | None ->
+                    ([%Michelson ({| { FAILWITH } |} : string * (nat * nat) -> storage)] ("FA2_INSUFFICIENT_BALANCE", (amt, bal)) : storage)
+                )
+            | None ->
+                (failwith("NEGATIVE_TOTAL_SUPPLY") : storage)
+            )
         | None ->
-            ([%Michelson ({| { FAILWITH } |} : string * (nat * nat) -> storage)] ("FA2_INSUFFICIENT_BALANCE", (amt, bal)) : storage)
+            (failwith("FA2_TOKEN_UNDEFINED") : storage)
       in store
   | None ->
       if (amt = 0n) then store // We allow 0 transfer
@@ -45,14 +52,18 @@ let debit_from (amt, from_, token_id, store: nat * address * token_id * storage)
 
 [@inline]
 let credit_to (amt, to_, token_id, store : nat * address * nat * storage): storage =
-  let new_bal =
-    match Big_map.find_opt (to_, token_id) store.ledger with
-      Some bal -> bal + amt
-    | None -> amt
-  in  { store with
-        ledger = Big_map.update (to_, token_id) (Some new_bal) store.ledger
-      }
-
+  match Map.find_opt token_id store.total_supply with
+    Some current_total_supply ->
+      let new_bal =
+        match Big_map.find_opt (to_, token_id) store.ledger with
+          Some bal -> bal + amt
+        | None -> amt
+      in  { store with
+            ledger = Big_map.update (to_, token_id) (Some new_bal) store.ledger
+          ; total_supply = Map.update token_id (Some (current_total_supply + amt)) store.total_supply
+          }
+  | None ->
+      (failwith("FA2_TOKEN_UNDEFINED") : storage)
 
 // -----------------------------------------------------------------
 // Transfer

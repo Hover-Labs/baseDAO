@@ -80,4 +80,15 @@ mkFA2Tests defaultStorage mc = testGroup "FA2 off-chain views"
           (DAO.tokenMetadataView mc) defaultStorage (ViewParam DAO.frozenTokenId)
         @?= Right (DAO.frozenTokenId, DAO.mcFrozenTokenMetadata DAO.defaultMetadataConfig)
     ]
+  , testGroup "get_total_supply" $
+    let checkTotalSupply st param =
+          runView @Natural (DAO.getTotalSupplyView mc) st (ViewParam param)
+    in
+    [ testCase "Get unfrozen token total supply" $
+        checkTotalSupply defaultStorage DAO.unfrozenTokenId
+          @?= Right 100
+    , testCase "Get frozen token total supply" $
+        checkTotalSupply defaultStorage DAO.frozenTokenId
+          @?= Right 200
+    ]
   ]

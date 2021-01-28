@@ -23,6 +23,7 @@ import Morley.Nettest
 import Named (defaults, (!))
 import Util.Named ((.!))
 
+import BaseDAO.ShareTest.Common (getTotalSupplyFromLedger)
 import qualified Lorentz.Contracts.BaseDAO as DAO
 import Lorentz.Contracts.BaseDAO.Types
 import qualified Lorentz.Contracts.BaseDAO.Types as DAO
@@ -78,6 +79,7 @@ originateBaseDaoWithBalance contractExtra config balFunc = do
           ! #metadata mempty
           ! defaults
           ) { sLedger = BigMap bal
+            , sTotalSupply = getTotalSupplyFromLedger (BigMap bal)
             , sOperators = BigMap operators
             }
       , odContract = DAO.baseDaoContract config

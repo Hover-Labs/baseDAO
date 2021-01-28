@@ -15,6 +15,7 @@ import Lorentz.Test
 import Named (defaults, (!))
 import Util.Named ((.!))
 
+import BaseDAO.ShareTest.Common (getTotalSupplyFromLedger)
 import qualified Lorentz.Contracts.BaseDAO as DAO
 import Lorentz.Contracts.BaseDAO.Types
 
@@ -49,6 +50,7 @@ lOriginateBaseDao contractExtra config = do
                     ! defaults
         )
         { sLedger = BigMap bal
+        , sTotalSupply = getTotalSupplyFromLedger (BigMap bal)
         , sOperators = BigMap operators
         }
 

@@ -46,6 +46,7 @@ let base_DAO_contract
                           | Burn (p) -> burn(p, store)
                           | Mint (p) -> mint(p, store)
                           | GetVotePermitCounter (p) -> get_vote_permit_counter (p, store)
+                          | Get_total_supply (p) -> get_total_supply (p, store)
                       end
                 in (result.0, (result.1, config))
       end
